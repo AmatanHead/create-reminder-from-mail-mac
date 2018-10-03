@@ -5,221 +5,114 @@
 # Use at your own risk and responsibility
 # Backup your data before use
 
-# Last update: 2016-03-15
-# Version: 0.5.0
-# Tested on OS X 10.11.3 El Capitan
+# Last update: 2018-10-03
+# Version: 0.6.0
+# Tested on OS X 10.13.5 High Sierra
 
 # Description
 # When installed as a Service, this AppleScript script can be used to automatically create a reminder (in pre-defined Reminder lists)
 # from a selected email and flag the email.
 # If you run the script against an email that matches an existing reminder it can mark the reminder as completed and clear the flag in Mail
 
-# Contributors and sources
-# Rick0713 at https://discussions.apple.com/thread/3435695?start=30&tstart=0
-# http://www.macosxautomation.com/applescript/sbrt/sbrt-06.html
-# http://www.michaelkummer.com/2014/03/18/how-to-create-a-reminder-from-an-e-mail/
+# Adapted from https://github.com/moritzregnier/create-reminder-from-mail-mac
 
-#################################################################################
-# Configuration
-#################################################################################
-
-# Set this according to your email account names and Reminder's lists
-# Depending on your needs multiple accounts can send reminders to one or more reminder lists
-set Work1AccountName to "Work"
-set Work1RemindersList to "Work"
-set Work2AccountName to "WorkOther"
-set Work2RemindersList to "Work"
-set Personal1AccountName to "Privat"
-set Personal1RemindersList to "Privat"
-set Personal2AccountName to "iCloud"
-set Personal2RemindersList to "Privat"
-set Personal3AccountName to "Google"
-set Personal3RemindersList to "Privat"
-set Personal4AccountName to "PrivatOther"
-set Personal4RemindersList to "Privat"
-
-# Set the name of the default reminder list (depends on your OS Language)
-set DefaultReminderList to "Reminders"
-
-# On my machine 5 is the Purple flag, which is the color I would like to use for mails flagged as Reminder
-# choose something between 1 and 6
-set FlagIndex to 5
-
-# Set the default reminder date
-# these are the possible choices: "Tomorrow", "2 Days", "3 Days", "4 Days", "End of Week", "Next Monday", "1 Week", "2 Weeks", "1 Month", "2 Months", "3 Months", "Specify"
-set defaultReminder to "1 Week"
-
-# Set the default reminder time in hours after midnight, I suggest any number between 0,5 and 23,5
-# for a reminder at "8:00 am" set "8", for "3 PM" or "15:00" set "15", for "8h45" set "8,75"
-set defaultReminderTime to "9"
-
-# For 'zero-mail' inbox: if this switch is set 'on' it will move the message automatically to the archive once a reminder has been set,
-# Set to 'off' if you want to keep the message where it is 
-# switch 'auto-achive' "on" or "off"
-set switchArchive to "on"
-
-# Set the archive target mailbox
-set Work1Archive to "Archive"
-set Work2Archive to "Archive"
-set Personal1Archive to "Archive"
-set Personal2Archive to "Archive"
-set Personal3Archive to "Archive"
-set Personal3Archive to "Archive"
-
-#################################################################################
-# Script
-#################################################################################
-
-tell application "Mail"
-	set theSelection to selection as list
-	# do nothing if no email is selected in Mail
-	try
-		set theMessage to item 1 of theSelection
-	on error
-		return
-	end try
+on run {input, parameters}
+	set DefaultReminderList to "tasks"
+	set FlagIndex to 5
+	set defaultReminder to "Tomorrow"
+	set defaultReminderTime to "12"
 	
-	set theSubject to theMessage's subject
-	set theOrigMessageId to theMessage's message id
-	set theUrl to {"message:%3C" & my replaceText(theOrigMessageId, "%", "%25") & "%3E"}
-	
-	# Make sure reminder doesn't already exist so we don't create duplicates
-	tell application "Reminders"
-		set theNeedlesName to name of reminders whose body is theUrl and completed is false
-		if theNeedlesName is not {} then
-			# make sure dialog is in focus when called as a service
-			# without the below, Mail would be the active application
-			tell me
-				activate
-			end tell
-			set theButton to button returned of (display dialog "The selected email matches an existing reminder: '" & theNeedlesName & "'. Would you like to mark the reminder as complete and clear any remaining flags of this message?" with title "Create Reminder from E-Mail" buttons {"New date", "Cancel", "Mark complete"} default button 3)
-			
-			if theButton is "Mark complete" then
-				tell application "Mail"
-					# unflag email/message
-					set flag index of theMessage to -1
-				end tell
-				# find correct reminder based on subject and mark as complete
-				set theNeedle to last reminder whose body is theUrl and completed is false
-				set completed of theNeedle to true
-				return
-			else if theButton is "New date" then
-				# set the new reminder date
-				
-				# present user with a list of follow-up times (in minutes)
-				(choose from list {"Tomorrow", "2 Days", "3 Days", "4 Days", "End of Week", "Next Monday", "1 Week", "2 Weeks", "1 Month", "2 Months", "3 Months", "Specify"} default items defaultReminder OK button name "Set new date" with prompt "Set follow-up time" with title "Set new reminder date")
-				
-				set reminderDate to result as text
-				
-				# Exit if user clicks Cancel
-				if reminderDate is "false" then return
-				
-				# choose the reminder date
-				set remindMeDate to my chooseRemindMeDate(reminderDate)
-				set time of remindMeDate to 60 * 60 * defaultReminderTime
-				
-				# find correct reminder based on subject and mark as complete
-				set theNeedle to last reminder whose body is theUrl and completed is false
-				set remind me date of theNeedle to remindMeDate
-				return
-			else if theButton is "Cancel" then
-				return
-			end if
-			
-		end if
-	end tell
-	
-	# display a dialog to ask for the reminder title
-	if flag index of theMessage is not FlagIndex then
-		display dialog "Create a reminder with the following title: '" & theSubject & "' or choose 'Other'" with title "Choose a title for the reminder" buttons {"Other", "Cancel", "OK"} default button 3
-		
-		set theSubjectChoice to button returned of result
-		if theSubjectChoice is "OK" then
-			set theSubject to theMessage's subject
-		else if theSubjectChoice is "Cancel" then
+	tell application "Mail"
+		set theSelection to selection as list
+		# do nothing if no email is selected in Mail
+		try
+			set theMessage to item 1 of theSelection
+		on error
 			return
-		else if theSubjectChoice is "Other" then
-			set theSubject to text returned of (display dialog "Choose a title:" default answer theSubject)
-		end if
-	end if
-	
-	# present user with a list of follow-up times (in minutes)
-	(choose from list {"Tomorrow", "2 Days", "3 Days", "4 Days", "End of Week", "Next Monday", "1 Week", "2 Weeks", "1 Month", "2 Months", "3 Months", "Specify"} default items defaultReminder OK button name "Create" with prompt "Set follow-up time" with title "Create Reminder from E-Mail")
-	
-	set reminderDate to result as rich text
-
-	# exit if user clicks Cancel or Escape
-	if reminderDate is "false" then return
-	
-	# for all the other options, calculate the date based on the current date
-	set remindMeDate to my chooseRemindMeDate(reminderDate)
-	
-	# set the time for on the reminder date
-	set time of remindMeDate to 60 * 60 * defaultReminderTime
-	
-	# Flag selected email/message in Mail
-	set flag index of theMessage to FlagIndex
-	
-	# Get the unique identifier (ID) of selected email/message
-	set theOrigMessageId to theMessage's message id
-	
-	#we need to encode % with %25 because otherwise the URL will be screwed up in Reminders and you won't be able to just click on it to open the linked message in Mail
-	set theUrl to {"message:%3C" & my replaceText(theOrigMessageId, "%", "%25") & "%3E"}
-	
-	# determine correct Reminder's list based on account the email/message is in
-	if name of account of mailbox of theMessage is Work1AccountName then
-		set RemindersList to Work1RemindersList
-	else if name of account of mailbox of theMessage is Work2AccountName then
-		set RemindersList to Work2RemindersList
-	else if name of account of mailbox of theMessage is Personal1AccountName then
-		set RemindersList to Personal1RemindersList
-	else if name of account of mailbox of theMessage is Personal2AccountName then
-		set RemindersList to Personal2RemindersList
-	else if name of account of mailbox of theMessage is Personal3AccountName then
-		set RemindersList to Personal3RemindersList
-	else if name of account of mailbox of theMessage is Personal4AccountName then
-		set RemindersList to Personal4RemindersList
-	else if account type of account of mailbox of theMessage is "r/o" then
-		#default list name in Reminders
-		set RemindersList to DefaultReminderList
-	else
-		#default list name in Reminders
-		set RemindersList to DefaultReminderList
-	end if
-	
-	# dispatch the mailbox where to archive the selected message
-	if switchArchive is "on" then
-		if name of account of mailbox of theMessage is Work1AccountName then
-			move theMessage to mailbox Work1Archive of account Work1AccountName
-		else if name of account of mailbox of theMessage is Work2AccountName then
-			move theMessage to mailbox Work2Archive of account Work2AccountName
-		else if name of account of mailbox of theMessage is Personal1AccountName then
-			move theMessage to mailbox Personal1Archive of account Personal1AccountName
-		else if name of account of mailbox of theMessage is Personal2AccountName then
-			move theMessage to mailbox Personal2Archive of account Personal2AccountName
-		else if name of account of mailbox of theMessage is Personal3AccountName then
-			move theMessage to mailbox Personal3Archive of account Personal3AccountName
-		else if name of account of mailbox of theMessage is Personal4AccountName then
-			move theMessage to mailbox Personal4Archive of account Personal4AccountName
-		end if
-	end if
-	
-end tell
-
-tell application "Reminders"
-	
-	tell list RemindersList
-		# create new reminder with proper due date, subject name and the URL linking to the email in Mail
-		make new reminder with properties {name:theSubject, remind me date:remindMeDate, body:theUrl}
+		end try
 		
+		set theSubject to theMessage's subject
+		set theOrigMessageId to theMessage's message id
+		set theUrl to {"message:%3C" & my replaceText(theOrigMessageId, "%", "%25") & "%3E"}
+		
+		tell application "Reminders"
+			set theNeedlesName to name of reminders whose body is theUrl and completed is false
+			if theNeedlesName is not {} then
+				tell application "Mail"
+					set theButton to button returned of (display dialog "Edit '" & theNeedlesName & "'" with icon note buttons {"New date", "Cancel", "Mark complete"} default button "Mark complete" cancel button "Cancel")
+				end tell
+				
+				if theButton is "Mark complete" then
+					tell application "Mail"
+						# unflag email/message
+						set flag index of theMessage to -1
+					end tell
+					# find correct reminder based on subject and mark as complete
+					set theNeedle to last reminder whose body is theUrl and completed is false
+					set completed of theNeedle to true
+					return
+				else if theButton is "New date" then
+					# set the new reminder date
+					
+					tell application "Mail"
+						# present user with a list of follow-up times (in minutes)
+						(choose from list {"15 Minutes", "1 Hour", "5 Hours", "Tomorrow", "End of Week", "Next Monday", "1 Week", "1 Month", "Specify"} default items defaultReminder with prompt "New time for '" & theNeedlesName & "':")
+					end tell
+					set reminderDate to result as text
+					
+					# Exit if user clicks Cancel
+					if reminderDate is "false" then return
+					
+					# choose the reminder date
+					set remindMeDate to my chooseRemindMeDate(reminderDate, defaultReminderTime)
+					
+					# find correct reminder based on subject and update it
+					set theNeedle to last reminder whose body is theUrl and completed is false
+					set remind me date of theNeedle to remindMeDate
+					return
+				else if theButton is "Cancel" then
+					return
+				end if
+			end if
+		end tell
+		
+		set res to display dialog "Remind me about:" with icon note default answer theSubject
+		
+		set theSubjectChoice to button returned of res
+		
+		if theSubjectChoice is "Cancel" then
+			return
+		end if
+		
+		set theSubject to text returned of res
+		
+		(choose from list {"15 Minutes", "1 Hour", "5 Hours", "Tomorrow", "End of Week", "Next Monday", "1 Week", "1 Month", "Specify"} default items defaultReminder with prompt "Time for '" & theSubject & "':")
+		
+		set reminderDate to result as rich text
+		
+		# Exit if user clicks Cancel
+		if reminderDate is "false" then return
+		
+		# choose the reminder date
+		set remindMeDate to my chooseRemindMeDate(reminderDate, defaultReminderTime)
+		
+		set flag index of theMessage to FlagIndex
+		
+		set theOrigMessageId to theMessage's message id
+		
+		set theUrl to {"message:%3C" & my replaceText(theOrigMessageId, "%", "%25") & "%3E"}
+		
+		set RemindersList to DefaultReminderList
 	end tell
 	
-end tell
-
-
-#################################################################################
-# Functions
-#################################################################################
+	tell application "Reminders"
+		tell list RemindersList
+			# create new reminder with proper due date, subject name and the URL linking to the email in Mail
+			make new reminder with properties {name:theSubject, remind me date:remindMeDate, body:theUrl}
+		end tell
+	end tell
+	
+end run
 
 # string replace function
 # used to replace % with %25
@@ -235,22 +128,21 @@ on replaceText(subject, find, replace)
 	return subject
 end replaceText
 
+
 # date calculation with the selection from the dialogue
 # use to set the initial and the re-scheduled date
-on chooseRemindMeDate(selectedDate)
-	if selectedDate = "Tomorrow" then
-		# add 1 day and set time to 9h into the day = 9am
+on chooseRemindMeDate(selectedDate, defaultReminderTime)
+	if selectedDate = "15 Minutes" then
+		set remindMeDate to (current date) + 15 * minutes
+		return remindMeDate
+	else if selectedDate = "1 Hour" then
+		set remindMeDate to (current date) + 1 * hours
+		return remindMeDate
+	else if selectedDate = "5 Hours" then
+		set remindMeDate to (current date) + 5 * hours
+		return remindMeDate
+	else if selectedDate = "Tomorrow" then
 		set remindMeDate to (current date) + 1 * days
-		
-	else if selectedDate = "2 Days" then
-		set remindMeDate to (current date) + 2 * days
-		
-	else if selectedDate = "3 Days" then
-		set remindMeDate to (current date) + 3 * days
-		
-	else if selectedDate = "4 Days" then
-		set remindMeDate to (current date) + 4 * days
-		
 	else if selectedDate = "End of Week" then
 		# end of week means Thursday in terms of reminders
 		# get the current day of the week
@@ -272,7 +164,6 @@ on chooseRemindMeDate(selectedDate)
 		else if curWeekDay = "Sunday" then
 			set remindMeDate to (current date) + 4 * days
 		end if
-		
 	else if selectedDate = "Next Monday" then
 		set curWeekDay to weekday of (current date) as string
 		if curWeekDay = "Monday" then
@@ -290,33 +181,25 @@ on chooseRemindMeDate(selectedDate)
 		else if curWeekDay = "Sunday" then
 			set remindMeDate to (current date) + 1 * days
 		end if
-		
 	else if selectedDate = "1 Week" then
 		set remindMeDate to (current date) + 7 * days
-		
-	else if selectedDate = "2 Weeks" then
-		set remindMeDate to (current date) + 14 * days
-		
 	else if selectedDate = "1 Month" then
 		set remindMeDate to (current date) + 28 * days
-		
-	else if selectedDate = "2 Months" then
-		set remindMeDate to (current date) + 56 * days
-		
-	else if selectedDate = "3 Months" then
-		set remindMeDate to (current date) + 84 * days
-		
 	else if selectedDate = "Specify" then
 		# adapt the date format suggested with what is configured in the user's 'Language/Region'-Preferences
 		set theDateSuggestion to (short date string of (current date))
-		set theDateInput to text returned of (display dialog "Type the date for the reminder (e.g. '" & theDateSuggestion & "'):" default answer theDateSuggestion buttons {"Cancel", "OK"} default button "OK")
+		tell application "Mail"
+			set theDateInput to text returned of (display dialog "Reminder date: (e.g. '" & theDateSuggestion & "'):" default answer theDateSuggestion buttons {"OK"} default button "OK")
+		end tell
 		try
 			set remindMeDate to date theDateInput
 		on error
 			set remindMeDate to (current date) + 1 * days
-			(display dialog "There was an error with the date input provided: '" & theDateInput & "'. The reminder was set to tomorrow." with title "Error: '" & theDateInput & "'")
+			(display dialog "There was an error with the date input provided: '" & theDateInput & "'. The reminder was set to tomorrow.")
 		end try
 	end if
+	
+	set time of remindMeDate to 60 * 60 * defaultReminderTime
 	
 	return remindMeDate
 end chooseRemindMeDate
